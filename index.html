@@ -214,6 +214,15 @@
     color: #484f58;
   }
 
+  #popup-image {
+    width: 100%;
+    height: 120px;
+    object-fit: cover;
+    border-radius: 6px;
+    margin-top: 10px;
+    display: none;
+  }
+
   .popup-more {
     margin-top: 8px;
     padding-top: 8px;
@@ -414,6 +423,7 @@
     <div class="popup-detail" id="popup-performer">
       <span class="icon">🎤</span><span id="popup-performer-text"></span>
     </div>
+    <img id="popup-image" src="" alt="" />
     <div class="popup-more" id="popup-more"></div>
   </div>
 
@@ -589,7 +599,7 @@ const PROVINCE_FILTERS = {
 
 function buildProvinceQuery(date, filterValues) {
   return `PREFIX schema: <http://schema.org/>
-SELECT DISTINCT ?event ?name ?startDate ?locationName ?addressLocality ?addressRegion ?performerName ?organizerName
+SELECT DISTINCT ?event ?name ?startDate ?locationName ?addressLocality ?addressRegion ?performerName ?organizerName ?imageUrl
 WHERE {
   ?event a schema:Event ;
          schema:name ?name ;
@@ -606,6 +616,18 @@ WHERE {
   OPTIONAL {
     ?event schema:organizer ?org .
     ?org schema:name ?organizerName .
+  }
+  OPTIONAL {
+    # Direct URL literal: schema:image "https://..."
+    ?event schema:image ?directImage .
+    FILTER(isLiteral(?directImage))
+    BIND(?directImage AS ?imageUrl)
+  }
+  OPTIONAL {
+    # ImageObject pattern: schema:image [ schema:url "https://..." ]
+    ?event schema:image ?imgObj .
+    ?imgObj schema:url ?objImage .
+    BIND(?objImage AS ?imageUrl)
   }
   FILTER(STRSTARTS(STR(?startDate), "${date}"))
   FILTER(LCASE(STR(?addressRegion)) IN (${filterValues}))
@@ -656,6 +678,7 @@ function processBindings(bindings) {
         province: normalizeProvince(b.addressRegion?.value),
         performer: b.performerName?.value || '',
         organizer: b.organizerName?.value || '',
+        image: b.imageUrl?.value || '',
       });
     } else {
       const ev = map.get(uri);
@@ -665,6 +688,7 @@ function processBindings(bindings) {
       if (!ev.venue && b.locationName?.value) ev.venue = b.locationName.value;
       if (!ev.city && b.addressLocality?.value) ev.city = b.addressLocality.value;
       if (!ev.province) ev.province = normalizeProvince(b.addressRegion?.value);
+      if (!ev.image && b.imageUrl?.value) ev.image = b.imageUrl.value;
     }
   }
 
@@ -901,6 +925,15 @@ function showPopup(mouseEvent, ev, others, svgX, svgY) {
     perfEl.style.display = 'flex';
   } else {
     perfEl.style.display = 'none';
+  }
+
+  const imageEl = document.getElementById('popup-image');
+  if (ev.image) {
+    imageEl.src = ev.image;
+    imageEl.style.display = 'block';
+  } else {
+    imageEl.src = '';
+    imageEl.style.display = 'none';
   }
 
   const more = document.getElementById('popup-more');
