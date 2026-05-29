@@ -1,0 +1,1005 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Artsdata — Live Arts Events Across Canada</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    background: #0d1117;
+    color: #e6edf3;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+  }
+
+  header {
+    padding: 20px 32px 16px;
+    border-bottom: 1px solid #21262d;
+    display: flex;
+    align-items: center;
+    gap: 32px;
+    flex-wrap: wrap;
+  }
+
+  .header-title {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+
+  h1 {
+    font-size: 1.3rem;
+    font-weight: 600;
+    letter-spacing: -0.01em;
+    color: #f0f6fc;
+  }
+
+  .subtitle {
+    font-size: 0.78rem;
+    color: #7d8590;
+  }
+
+  .controls {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+
+  label {
+    font-size: 0.82rem;
+    color: #8b949e;
+  }
+
+  input[type="date"] {
+    background: #161b22;
+    border: 1px solid #30363d;
+    color: #e6edf3;
+    padding: 6px 12px;
+    border-radius: 6px;
+    font-size: 0.88rem;
+    cursor: pointer;
+    outline: none;
+    transition: border-color 0.15s;
+  }
+  input[type="date"]:hover { border-color: #58a6ff; }
+  input[type="date"]:focus { border-color: #58a6ff; box-shadow: 0 0 0 3px rgba(88,166,255,0.15); }
+
+  #status {
+    font-size: 0.8rem;
+    color: #7d8590;
+    padding: 0 32px;
+    height: 28px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .spinner {
+    width: 12px;
+    height: 12px;
+    border: 2px solid #30363d;
+    border-top-color: #58a6ff;
+    border-radius: 50%;
+    animation: spin 0.7s linear infinite;
+    display: none;
+  }
+  .spinner.active { display: block; }
+
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  .event-count {
+    background: #1c2128;
+    border: 1px solid #30363d;
+    border-radius: 12px;
+    padding: 1px 8px;
+    font-size: 0.75rem;
+    color: #58a6ff;
+  }
+
+  #map-container {
+    flex: 1;
+    position: relative;
+    padding: 8px 24px 24px;
+  }
+
+  #canada-map {
+    width: 100%;
+    max-width: 1100px;
+    margin: 0 auto;
+    display: block;
+  }
+
+  /* Province styles */
+  .province {
+    fill: #1c2128;
+    stroke: #30363d;
+    stroke-width: 1.5;
+    transition: fill 0.2s;
+  }
+
+  .province.has-events {
+    fill: #162032;
+    stroke: #388bfd;
+    stroke-width: 1.8;
+  }
+
+  .province-label {
+    fill: #484f58;
+    font-size: 9px;
+    text-anchor: middle;
+    pointer-events: none;
+    user-select: none;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    font-weight: 500;
+  }
+
+  .province.has-events + .province-label,
+  .province-label.active {
+    fill: #58a6ff;
+  }
+
+  /* Event dots */
+  .event-dot {
+    fill: #f78166;
+    stroke: #0d1117;
+    stroke-width: 2;
+    cursor: pointer;
+    transition: r 0.15s, fill 0.15s;
+    filter: drop-shadow(0 0 6px rgba(247,129,102,0.5));
+  }
+
+  .event-dot:hover,
+  .event-dot.hovered {
+    fill: #ff9a83;
+    r: 9;
+    filter: drop-shadow(0 0 10px rgba(247,129,102,0.8));
+  }
+
+  /* Popup */
+  #popup {
+    position: absolute;
+    background: #161b22;
+    border: 1px solid #30363d;
+    border-radius: 10px;
+    padding: 14px 16px;
+    min-width: 220px;
+    max-width: 280px;
+    pointer-events: none;
+    opacity: 0;
+    transform: translateY(-4px);
+    transition: opacity 0.15s, transform 0.15s;
+    z-index: 100;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.5);
+  }
+
+  #popup.visible {
+    opacity: 1;
+    transform: translateY(0);
+  }
+
+  .popup-province {
+    font-size: 0.68rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: #58a6ff;
+    margin-bottom: 6px;
+  }
+
+  .popup-title {
+    font-size: 0.92rem;
+    font-weight: 600;
+    color: #f0f6fc;
+    line-height: 1.3;
+    margin-bottom: 8px;
+  }
+
+  .popup-detail {
+    font-size: 0.78rem;
+    color: #8b949e;
+    line-height: 1.5;
+    display: flex;
+    gap: 6px;
+    align-items: flex-start;
+    margin-bottom: 3px;
+  }
+
+  .popup-detail .icon {
+    flex-shrink: 0;
+    margin-top: 1px;
+    color: #484f58;
+  }
+
+  .popup-more {
+    margin-top: 8px;
+    padding-top: 8px;
+    border-top: 1px solid #21262d;
+    font-size: 0.73rem;
+    color: #484f58;
+    font-style: italic;
+  }
+
+  #no-events {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    text-align: center;
+    color: #484f58;
+    font-size: 0.9rem;
+    display: none;
+  }
+
+  footer {
+    padding: 10px 32px;
+    border-top: 1px solid #21262d;
+    font-size: 0.73rem;
+    color: #484f58;
+    display: flex;
+    gap: 16px;
+    align-items: center;
+  }
+
+  footer a {
+    color: #388bfd;
+    text-decoration: none;
+  }
+  footer a:hover { text-decoration: underline; }
+
+  .nav-btn, .today-btn {
+    background: #161b22;
+    border: 1px solid #30363d;
+    color: #e6edf3;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 0.88rem;
+    line-height: 1;
+    transition: background 0.15s, border-color 0.15s;
+  }
+  .nav-btn {
+    padding: 6px 11px;
+    font-size: 1rem;
+  }
+  .today-btn {
+    padding: 6px 12px;
+  }
+  .nav-btn:hover, .today-btn:hover {
+    background: #21262d;
+    border-color: #58a6ff;
+    color: #58a6ff;
+  }
+  .nav-btn:active, .today-btn:active {
+    background: #388bfd22;
+  }
+  .today-btn.is-today {
+    border-color: #388bfd;
+    color: #58a6ff;
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="header-title">
+    <h1>🎭 Live Arts Events Across Canada</h1>
+    <div class="subtitle">Powered by the Artsdata Knowledge Graph</div>
+  </div>
+  <div class="controls">
+    <label for="datePicker">Date</label>
+    <button class="nav-btn" id="btnPrev" title="Previous day">&#8592;</button>
+    <input type="date" id="datePicker">
+    <button class="nav-btn" id="btnNext" title="Next day">&#8594;</button>
+    <button class="today-btn" id="btnToday">Today</button>
+  </div>
+</header>
+
+<div id="status">
+  <div class="spinner" id="spinner"></div>
+  <span id="statusText">Select a date to load events.</span>
+</div>
+
+<div id="map-container">
+
+  <!-- Canada SVG Map -->
+  <!-- viewBox: lon -141 to -52 (89°), lat 83 to 42 (41°)
+       x = (lon + 141) / 89 * 960
+       y = (83 - lat) / 41 * 580  -->
+  <svg id="canada-map" viewBox="0 0 960 580" xmlns="http://www.w3.org/2000/svg">
+
+    <!-- ── Territories ─────────────────────────────────── -->
+
+    <!-- Yukon: W -141, E -124, N 69.5, S 60 (with notch for AK panhandle at SW) -->
+    <polygon id="prov-YT" class="province"
+      points="0,200 183,200 183,337 43,337 0,337"/>
+    <text class="province-label" data-prov="YT" x="82" y="280">YT</text>
+
+    <!-- Northwest Territories: W -124, E -95, N 70, S 60 -->
+    <polygon id="prov-NT" class="province"
+      points="183,190 495,190 495,337 183,337"/>
+    <text class="province-label" data-prov="NT" x="335" y="270">NT</text>
+
+    <!-- Nunavut (mainland approx): E to -57, N 70, S 60 -->
+    <polygon id="prov-NU" class="province"
+      points="495,190 947,190 947,337 495,337"/>
+    <text class="province-label" data-prov="NU" x="715" y="260">NU</text>
+
+    <!-- ── Western Provinces ───────────────────────────── -->
+
+    <!-- British Columbia: W -141, E ~-120, N 60, S 49 (diagonal eastern border) -->
+    <polygon id="prov-BC" class="province"
+      points="0,337 226,337 291,497 0,497"/>
+    <text class="province-label" data-prov="BC" x="100" y="420">BC</text>
+
+    <!-- Alberta: W -120, E -110, N 60, S 49 -->
+    <polygon id="prov-AB" class="province"
+      points="226,337 334,337 334,497 226,497"/>
+    <text class="province-label" data-prov="AB" x="280" y="420">AB</text>
+
+    <!-- Saskatchewan: W -110, E -102, N 60, S 49 -->
+    <polygon id="prov-SK" class="province"
+      points="334,337 421,337 421,497 334,497"/>
+    <text class="province-label" data-prov="SK" x="377" y="420">SK</text>
+
+    <!-- Manitoba: W -102, E -89, N 60, S 49 -->
+    <polygon id="prov-MB" class="province"
+      points="421,337 560,337 560,497 421,497"/>
+    <text class="province-label" data-prov="MB" x="490" y="420">MB</text>
+
+    <!-- ── Central Provinces ───────────────────────────── -->
+
+    <!-- Ontario (simplified) -->
+    <polygon id="prov-ON" class="province"
+      points="495,385 657,385 731,545 710,578 613,578 495,545"/>
+    <text class="province-label" data-prov="ON" x="595" y="470">ON</text>
+
+    <!-- Quebec (simplified, includes north shore) -->
+    <polygon id="prov-QC" class="province"
+      points="657,385 657,310 838,310 947,415 947,540 817,562 731,545 657,545 657,385"/>
+    <text class="province-label" data-prov="QC" x="790" y="420">QC</text>
+
+    <!-- ── Maritime Provinces ─────────────────────────── -->
+
+    <!-- New Brunswick -->
+    <polygon id="prov-NB" class="province"
+      points="797,515 838,515 838,562 797,562"/>
+    <text class="province-label" data-prov="NB" x="817" y="545">NB</text>
+
+    <!-- Nova Scotia (peninsula shape) -->
+    <polygon id="prov-NS" class="province"
+      points="807,550 866,568 855,578 808,578"/>
+    <text class="province-label" data-prov="NS" x="835" y="574">NS</text>
+
+    <!-- Prince Edward Island (tiny) -->
+    <polygon id="prov-PE" class="province"
+      points="838,510 852,510 847,520 836,520"/>
+    <text class="province-label" data-prov="PE" x="844" y="517">PE</text>
+
+    <!-- Newfoundland & Labrador – Labrador portion -->
+    <polygon id="prov-NL" class="province"
+      points="807,337 947,337 947,460 807,460"/>
+    <!-- Island of Newfoundland -->
+    <polygon id="prov-NL-island" class="province"
+      style="pointer-events:none"
+      points="873,460 958,498 940,525 875,505"/>
+    <text class="province-label" data-prov="NL" x="878" y="395">NL</text>
+
+    <!-- ── Ocean / background labels ─────────────────── -->
+    <text x="60" y="500" font-size="8" fill="#1e2730" text-anchor="middle"
+      transform="rotate(-15,60,500)">Pacific</text>
+    <text x="60" y="514" font-size="8" fill="#1e2730" text-anchor="middle"
+      transform="rotate(-15,60,514)">Ocean</text>
+
+    <!-- Event dots layer (populated by JS) -->
+    <g id="dots-layer"></g>
+
+  </svg>
+
+  <!-- Hover popup -->
+  <div id="popup">
+    <div class="popup-province" id="popup-province"></div>
+    <div class="popup-title" id="popup-title"></div>
+    <div class="popup-detail" id="popup-venue">
+      <span class="icon">🏛</span><span id="popup-venue-text"></span>
+    </div>
+    <div class="popup-detail" id="popup-city">
+      <span class="icon">📍</span><span id="popup-city-text"></span>
+    </div>
+    <div class="popup-detail" id="popup-time">
+      <span class="icon">🕐</span><span id="popup-time-text"></span>
+    </div>
+    <div class="popup-detail" id="popup-performer">
+      <span class="icon">🎤</span><span id="popup-performer-text"></span>
+    </div>
+    <div class="popup-more" id="popup-more"></div>
+  </div>
+
+  <div id="no-events">
+    <div style="font-size:2rem;margin-bottom:8px">🎭</div>
+    <div>No events found for this date in Artsdata.</div>
+    <div style="font-size:0.78rem;margin-top:4px;color:#30363d">Try a different date — data coverage varies.</div>
+  </div>
+
+</div>
+
+<footer>
+  <span>Data: <a href="https://kg.artsdata.ca" target="_blank">Artsdata Knowledge Graph</a></span>
+  <span>·</span>
+  <span>SPARQL: <a href="https://db.artsdata.ca/repositories/artsdata" target="_blank">db.artsdata.ca</a></span>
+  <span>·</span>
+  <span style="color:#30363d">Proof-of-concept prototype — up to 20 events shown per date</span>
+</footer>
+
+<script>
+// ── Configuration ────────────────────────────────────────────────────────────
+
+const ENDPOINT = 'https://db.artsdata.ca/repositories/artsdata';
+
+// Map projection: viewBox 960 × 580
+// x = (lon + 141) / 89 * 960
+// y = (83 - lat) / 41 * 580
+function project(lat, lon) {
+  return {
+    x: (lon + 141) / 89 * 960,
+    y: (83 - lat) / 41 * 580
+  };
+}
+
+// Province code normalization
+const PROV_NORM = {
+  'QC': 'QC', 'Québec': 'QC', 'Quebec': 'QC', 'québec': 'QC',
+  'ON': 'ON', 'Ontario': 'ON', 'ontario': 'ON',
+  'BC': 'BC', 'British Columbia': 'BC', 'british columbia': 'BC',
+  'AB': 'AB', 'Alberta': 'AB', 'alberta': 'AB',
+  'MB': 'MB', 'Manitoba': 'MB', 'manitoba': 'MB',
+  'SK': 'SK', 'Saskatchewan': 'SK', 'saskatchewan': 'SK',
+  'NS': 'NS', 'Nova Scotia': 'NS', 'nova scotia': 'NS',
+  'NB': 'NB', 'New Brunswick': 'NB', 'new brunswick': 'NB',
+  'Nouveau-Brunswick': 'NB', 'nouveau-brunswick': 'NB',
+  'NL': 'NL', 'Newfoundland': 'NL', 'newfoundland': 'NL',
+  'Newfoundland and Labrador': 'NL',
+  'PE': 'PE', 'Prince Edward Island': 'PE', 'PEI': 'PE',
+  'YT': 'YT', 'Yukon': 'YT', 'yukon': 'YT',
+  'NT': 'NT', 'Northwest Territories': 'NT',
+  'NU': 'NU', 'Nunavut': 'NU',
+};
+
+function normalizeProvince(str) {
+  if (!str) return null;
+  const s = str.trim();
+  const direct = PROV_NORM[s];
+  if (direct) return direct;
+  const lower = PROV_NORM[s.toLowerCase()];
+  if (lower) return lower;
+  if (s.length <= 3) return s.toUpperCase();
+  return null;
+}
+
+// City coordinates [lat, lon] for geocoding event locations
+const CITY_COORDS = {
+  // Ontario
+  'Toronto': [43.65, -79.38],
+  'Ottawa': [45.42, -75.70],
+  'Mississauga': [43.59, -79.64],
+  'Hamilton': [43.26, -79.87],
+  'London': [42.98, -81.24],
+  'Kingston': [44.23, -76.49],
+  'Windsor': [42.31, -83.04],
+  'Barrie': [44.39, -79.69],
+  'Thunder Bay': [48.38, -89.25],
+  'Sudbury': [46.49, -80.99],
+  'Kitchener': [43.45, -80.49],
+  'Waterloo': [43.47, -80.52],
+  'Guelph': [43.55, -80.25],
+  'Brantford': [43.14, -80.26],
+  'St. Catharines': [43.16, -79.25],
+  'Peterborough': [44.31, -78.32],
+  // Quebec
+  'Montréal': [45.50, -73.57],
+  'Montreal': [45.50, -73.57],
+  'Québec': [46.81, -71.21],
+  'Quebec': [46.81, -71.21],
+  'Gatineau': [45.48, -75.70],
+  'Laval': [45.57, -73.69],
+  'Sherbrooke': [45.40, -71.89],
+  'Saguenay': [48.43, -71.06],
+  'Trois-Rivières': [46.34, -72.55],
+  'Longueuil': [45.53, -73.52],
+  // British Columbia
+  'Vancouver': [49.25, -123.12],
+  'Victoria': [48.43, -123.37],
+  'Burnaby': [49.25, -122.98],
+  'Surrey': [49.19, -122.85],
+  'Kelowna': [49.89, -119.50],
+  'Abbotsford': [49.05, -122.32],
+  'Kamloops': [50.67, -120.33],
+  'Prince George': [53.92, -122.75],
+  'Nanaimo': [49.16, -123.94],
+  // Alberta
+  'Calgary': [51.05, -114.07],
+  'Edmonton': [53.55, -113.49],
+  'Lethbridge': [49.70, -112.83],
+  'Red Deer': [52.27, -113.81],
+  // Saskatchewan
+  'Saskatoon': [52.13, -106.67],
+  'Regina': [50.45, -104.62],
+  'Moose Jaw': [50.39, -105.53],
+  // Manitoba
+  'Winnipeg': [49.90, -97.14],
+  'Brandon': [49.85, -99.95],
+  // Nova Scotia
+  'Halifax': [44.65, -63.57],
+  'Sydney': [46.14, -60.19],
+  // New Brunswick
+  'Fredericton': [45.96, -66.64],
+  'Saint John': [45.27, -66.06],
+  'Moncton': [46.09, -64.80],
+  // PEI
+  'Charlottetown': [46.24, -63.13],
+  // Newfoundland & Labrador
+  "St. John's": [47.56, -52.71],
+  'Corner Brook': [48.95, -57.95],
+  // Territories
+  'Whitehorse': [60.72, -135.05],
+  'Yellowknife': [62.45, -114.37],
+  'Iqaluit': [63.75, -68.52],
+};
+
+// Province centroid fallbacks [lat, lon]
+const PROV_CENTROIDS = {
+  'BC': [54.0, -126.0],
+  'AB': [55.0, -115.0],
+  'SK': [54.0, -106.0],
+  'MB': [54.0, -97.0],
+  'ON': [50.0, -86.0],
+  'QC': [52.0, -70.0],
+  'NB': [46.5, -66.0],
+  'NS': [45.0, -63.0],
+  'PE': [46.4, -63.2],
+  'NL': [53.0, -60.0],
+  'YT': [64.0, -135.0],
+  'NT': [65.0, -118.0],
+  'NU': [70.0, -90.0],
+};
+
+// ── SPARQL ───────────────────────────────────────────────────────────────────
+// One query per province/territory, run in parallel.
+// This guarantees every region with data gets candidates regardless of how
+// many events ON or QC have — a single pooled query risks filling its LIMIT
+// entirely with results from data-rich provinces before reaching sparse ones.
+
+const PROVINCE_FILTERS = {
+  BC: '"bc", "british columbia"',
+  AB: '"ab", "alberta"',
+  SK: '"sk", "saskatchewan"',
+  MB: '"mb", "manitoba"',
+  ON: '"on", "ontario"',
+  QC: '"qc", "québec", "quebec"',
+  NB: '"nb", "new brunswick", "nouveau-brunswick"',
+  NS: '"ns", "nova scotia"',
+  PE: '"pe", "pei", "prince edward island"',
+  NL: '"nl", "newfoundland", "newfoundland and labrador"',
+  YT: '"yt", "yukon"',
+  NT: '"nt", "northwest territories"',
+  NU: '"nu", "nunavut"',
+};
+
+function buildProvinceQuery(date, filterValues) {
+  return `PREFIX schema: <http://schema.org/>
+SELECT DISTINCT ?event ?name ?startDate ?locationName ?addressLocality ?addressRegion ?performerName ?organizerName
+WHERE {
+  ?event a schema:Event ;
+         schema:name ?name ;
+         schema:startDate ?startDate ;
+         schema:location ?loc .
+  ?loc schema:address ?addr .
+  ?addr schema:addressLocality ?addressLocality .
+  ?addr schema:addressRegion ?addressRegion .
+  OPTIONAL { ?loc schema:name ?locationName . }
+  OPTIONAL {
+    ?event schema:performer ?perf .
+    ?perf schema:name ?performerName .
+  }
+  OPTIONAL {
+    ?event schema:organizer ?org .
+    ?org schema:name ?organizerName .
+  }
+  FILTER(STRSTARTS(STR(?startDate), "${date}"))
+  FILTER(LCASE(STR(?addressRegion)) IN (${filterValues}))
+}
+LIMIT 15`;
+  // LIMIT 15 per province: generous enough to survive deduplication
+  // (each unique event can appear multiple times due to multilingual triples)
+  // while staying light on the endpoint.
+}
+
+async function fetchEventsForProvince(date, filterValues) {
+  try {
+    const query = buildProvinceQuery(date, filterValues);
+    const resp = await fetch(ENDPOINT + '?' + new URLSearchParams({ query }), {
+      headers: { 'Accept': 'application/sparql-results+json' }
+    });
+    if (!resp.ok) return [];
+    const data = await resp.json();
+    return data.results.bindings;
+  } catch {
+    return []; // silently skip a province if its query fails
+  }
+}
+
+async function fetchEvents(date) {
+  // Fire all 13 province queries in parallel
+  const promises = Object.values(PROVINCE_FILTERS).map(filter =>
+    fetchEventsForProvince(date, filter)
+  );
+  const results = await Promise.all(promises);
+  return results.flat();
+}
+
+// ── Data processing ──────────────────────────────────────────────────────────
+
+function processBindings(bindings) {
+  // Deduplicate by event URI, merging multilingual/duplicate rows
+  const map = new Map();
+  for (const b of bindings) {
+    const uri = b.event.value;
+    if (!map.has(uri)) {
+      map.set(uri, {
+        uri,
+        name: b.name?.value || '',
+        startDate: b.startDate?.value || '',
+        venue: b.locationName?.value || '',
+        city: b.addressLocality?.value || '',
+        province: normalizeProvince(b.addressRegion?.value),
+        performer: b.performerName?.value || '',
+        organizer: b.organizerName?.value || '',
+      });
+    } else {
+      const ev = map.get(uri);
+      // Fill in missing optional fields from duplicate rows
+      if (!ev.performer && b.performerName?.value) ev.performer = b.performerName.value;
+      if (!ev.organizer && b.organizerName?.value) ev.organizer = b.organizerName.value;
+      if (!ev.venue && b.locationName?.value) ev.venue = b.locationName.value;
+      if (!ev.city && b.addressLocality?.value) ev.city = b.addressLocality.value;
+      if (!ev.province) ev.province = normalizeProvince(b.addressRegion?.value);
+    }
+  }
+
+  // Group by province
+  const byProv = {};
+  for (const ev of map.values()) {
+    if (!ev.province) continue;
+    (byProv[ev.province] = byProv[ev.province] || []).push(ev);
+  }
+
+  // ── NAC priority: always include one National Arts Centre event if available ──
+  const NAC_NAMES = ['national arts centre', 'centre national des arts', 'nac', 'cna'];
+  function isNAC(ev) {
+    const v = (ev.venue || '').toLowerCase();
+    const o = (ev.organizer || '').toLowerCase();
+    return NAC_NAMES.some(n => v.includes(n) || o.includes(n));
+  }
+
+  // Find the first NAC event across all provinces
+  let nacEvent = null;
+  for (const evs of Object.values(byProv)) {
+    const found = evs.find(isNAC);
+    if (found) { nacEvent = found; break; }
+  }
+
+  // Select up to 20 events with geographic spread (at most 3 per province)
+  const MAX_TOTAL = 20;
+  const MAX_PER_PROV = 3;
+  const result = [];
+
+  // Seed with NAC event first so it's guaranteed a slot
+  if (nacEvent) result.push(nacEvent);
+
+  const provs = Object.keys(byProv);
+
+  // Round-robin: add 1 per province first, then fill up to MAX_PER_PROV
+  for (let round = 0; round < MAX_PER_PROV; round++) {
+    for (const p of provs) {
+      if (result.length >= MAX_TOTAL) break;
+      const candidates = byProv[p];
+      for (let i = round; i < Math.min(candidates.length, round + 1); i++) {
+        // Skip if already added (e.g. the NAC event)
+        if (!result.includes(candidates[i])) {
+          result.push(candidates[i]);
+          break;
+        }
+      }
+    }
+    if (result.length >= MAX_TOTAL) break;
+  }
+
+  return result;
+}
+
+function formatTime(iso) {
+  try {
+    const d = new Date(iso);
+    if (isNaN(d)) return '';
+    const h = d.getHours(), m = d.getMinutes();
+    if (h === 0 && m === 0) return '';
+    return d.toLocaleTimeString('en-CA', { hour: 'numeric', minute: '2-digit', hour12: true });
+  } catch { return ''; }
+}
+
+function getCityCoords(city, province) {
+  if (!city) return PROV_CENTROIDS[province] || null;
+  // Try exact match
+  if (CITY_COORDS[city]) return CITY_COORDS[city];
+  // Try case-insensitive
+  const lower = city.toLowerCase();
+  for (const [k, v] of Object.entries(CITY_COORDS)) {
+    if (k.toLowerCase() === lower) return v;
+  }
+  // Fallback: province centroid with a small random offset for visual separation
+  if (PROV_CENTROIDS[province]) {
+    const c = PROV_CENTROIDS[province];
+    return [c[0] + (Math.random() - 0.5) * 2, c[1] + (Math.random() - 0.5) * 4];
+  }
+  return null;
+}
+
+// ── Rendering ────────────────────────────────────────────────────────────────
+
+let currentPopupDot = null;
+
+function renderEvents(events) {
+  const dotsLayer = document.getElementById('dots-layer');
+  dotsLayer.innerHTML = '';
+
+  // Reset province highlights
+  document.querySelectorAll('.province').forEach(el => el.classList.remove('has-events'));
+  document.querySelectorAll('.province-label').forEach(el => el.classList.remove('active'));
+
+  if (events.length === 0) {
+    document.getElementById('no-events').style.display = 'block';
+    return;
+  }
+  document.getElementById('no-events').style.display = 'none';
+
+  // Highlight active provinces
+  const activeProv = new Set(events.map(e => e.province).filter(Boolean));
+  for (const p of activeProv) {
+    const el = document.getElementById('prov-' + p);
+    if (el) el.classList.add('has-events');
+    document.querySelectorAll(`.province-label[data-prov="${p}"]`).forEach(el => el.classList.add('active'));
+  }
+
+  // Group events by city to avoid exact overlap
+  const byCity = {};
+  for (const ev of events) {
+    const key = (ev.city || 'unknown') + '|' + ev.province;
+    (byCity[key] = byCity[key] || []).push(ev);
+  }
+
+  // Place dots
+  for (const [key, cityEvents] of Object.entries(byCity)) {
+    const city = cityEvents[0].city;
+    const province = cityEvents[0].province;
+    const coords = getCityCoords(city, province);
+    if (!coords) continue;
+
+    const [lat, lon] = coords;
+    const { x, y } = project(lat, lon);
+
+    // If multiple events in same city, we'll show the count in the popup
+    const ev = cityEvents[0];
+    const others = cityEvents.slice(1);
+
+    const circle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+    circle.setAttribute('cx', x.toFixed(1));
+    circle.setAttribute('cy', y.toFixed(1));
+    circle.setAttribute('r', others.length > 0 ? '8' : '6');
+    circle.setAttribute('class', 'event-dot');
+    circle.dataset.city = city || '';
+    circle.dataset.province = province || '';
+    circle.dataset.eventUri = ev.uri;
+
+    // Hover handlers
+    circle.addEventListener('mouseenter', (e) => showPopup(e, ev, others, x, y));
+    circle.addEventListener('mouseleave', hidePopup);
+
+    dotsLayer.appendChild(circle);
+
+    // Count badge for multi-event cities
+    if (others.length > 0) {
+      const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+      text.setAttribute('x', x.toFixed(1));
+      text.setAttribute('y', (y + 4).toFixed(1));
+      text.setAttribute('text-anchor', 'middle');
+      text.setAttribute('font-size', '9');
+      text.setAttribute('fill', '#0d1117');
+      text.setAttribute('font-weight', '700');
+      text.setAttribute('pointer-events', 'none');
+      text.textContent = cityEvents.length;
+      dotsLayer.appendChild(text);
+    }
+  }
+}
+
+function showPopup(mouseEvent, ev, others, svgX, svgY) {
+  const popup = document.getElementById('popup');
+  const mapContainer = document.getElementById('map-container');
+  const svg = document.getElementById('canada-map');
+
+  // Convert SVG coords to screen coords
+  const svgRect = svg.getBoundingClientRect();
+  const vbWidth = 960, vbHeight = 580;
+  const scaleX = svgRect.width / vbWidth;
+  const scaleY = svgRect.height / vbHeight;
+
+  const screenX = svgRect.left + svgX * scaleX;
+  const screenY = svgRect.top + svgY * scaleY;
+
+  // Position relative to map-container
+  const containerRect = mapContainer.getBoundingClientRect();
+  let left = screenX - containerRect.left + 16;
+  let top = screenY - containerRect.top - 8;
+
+  // Flip left if near right edge
+  const popupWidth = 280;
+  if (left + popupWidth > mapContainer.offsetWidth - 16) {
+    left = screenX - containerRect.left - popupWidth - 16;
+  }
+
+  popup.style.left = left + 'px';
+  popup.style.top = top + 'px';
+
+  // Province labels
+  const PROV_NAMES = {
+    BC: 'British Columbia', AB: 'Alberta', SK: 'Saskatchewan', MB: 'Manitoba',
+    ON: 'Ontario', QC: 'Quebec', NB: 'New Brunswick', NS: 'Nova Scotia',
+    PE: 'PEI', NL: 'Newfoundland & Labrador', YT: 'Yukon', NT: 'NWT', NU: 'Nunavut',
+  };
+
+  document.getElementById('popup-province').textContent =
+    (PROV_NAMES[ev.province] || ev.province || '') + (ev.city ? ' · ' + ev.city : '');
+
+  const title = document.getElementById('popup-title');
+  title.textContent = ev.name || 'Untitled Event';
+
+  const venueEl = document.getElementById('popup-venue');
+  const venueText = document.getElementById('popup-venue-text');
+  if (ev.venue && ev.venue !== ev.name) {
+    venueText.textContent = ev.venue;
+    venueEl.style.display = 'flex';
+  } else {
+    venueEl.style.display = 'none';
+  }
+
+  const cityEl = document.getElementById('popup-city');
+  const cityText = document.getElementById('popup-city-text');
+  if (ev.city) {
+    cityText.textContent = ev.city + (ev.province ? ', ' + ev.province : '');
+    cityEl.style.display = 'flex';
+  } else {
+    cityEl.style.display = 'none';
+  }
+
+  const timeEl = document.getElementById('popup-time');
+  const timeText = document.getElementById('popup-time-text');
+  const t = formatTime(ev.startDate);
+  if (t) {
+    timeText.textContent = t;
+    timeEl.style.display = 'flex';
+  } else {
+    timeEl.style.display = 'none';
+  }
+
+  const perfEl = document.getElementById('popup-performer');
+  const perfText = document.getElementById('popup-performer-text');
+  const performer = ev.performer || ev.organizer;
+  if (performer && performer !== ev.name) {
+    perfText.textContent = performer;
+    perfEl.style.display = 'flex';
+  } else {
+    perfEl.style.display = 'none';
+  }
+
+  const more = document.getElementById('popup-more');
+  if (others.length > 0) {
+    const names = others.slice(0, 2).map(o => o.name).join(', ');
+    const extra = others.length > 2 ? ` +${others.length - 2} more` : '';
+    more.textContent = `Also in this city: ${names}${extra}`;
+    more.style.display = 'block';
+  } else {
+    more.style.display = 'none';
+  }
+
+  popup.classList.add('visible');
+}
+
+function hidePopup() {
+  document.getElementById('popup').classList.remove('visible');
+}
+
+// ── Main logic ───────────────────────────────────────────────────────────────
+
+let loadingTimer = null;
+
+async function loadForDate(date) {
+  const spinner = document.getElementById('spinner');
+  const statusText = document.getElementById('statusText');
+  const noEvents = document.getElementById('no-events');
+
+  spinner.classList.add('active');
+  statusText.textContent = 'Querying all 13 provinces & territories in parallel…';
+  noEvents.style.display = 'none';
+  hidePopup();
+  document.getElementById('dots-layer').innerHTML = '';
+
+  try {
+    const bindings = await fetchEvents(date);
+    const events = processBindings(bindings);
+    renderEvents(events);
+
+    if (events.length > 0) {
+      const provinceCount = new Set(events.map(e => e.province).filter(Boolean)).size;
+      statusText.innerHTML = `Showing <span class="event-count">${events.length} events</span> across ${provinceCount} province${provinceCount !== 1 ? 's' : ''}`;
+    } else {
+      statusText.textContent = 'No events found for this date.';
+    }
+  } catch (err) {
+    statusText.textContent = 'Error fetching data: ' + err.message;
+    console.error(err);
+  } finally {
+    spinner.classList.remove('active');
+  }
+}
+
+// ── Date helpers ─────────────────────────────────────────────────────────────
+
+function toDateStr(date) {
+  const yyyy = date.getFullYear();
+  const mm   = String(date.getMonth() + 1).padStart(2, '0');
+  const dd   = String(date.getDate()).padStart(2, '0');
+  return `${yyyy}-${mm}-${dd}`;
+}
+
+function stepDate(dateStr, days) {
+  // Use noon to avoid DST edge-cases when adding days
+  const d = new Date(dateStr + 'T12:00:00');
+  d.setDate(d.getDate() + days);
+  return toDateStr(d);
+}
+
+// ── Initialize controls ───────────────────────────────────────────────────────
+
+const todayStr = toDateStr(new Date());
+const picker   = document.getElementById('datePicker');
+
+function setDate(dateStr) {
+  picker.value = dateStr;
+  // Highlight Today button when the selected date is today
+  document.getElementById('btnToday').classList.toggle('is-today', dateStr === todayStr);
+  loadForDate(dateStr);
+}
+
+picker.addEventListener('change', () => {
+  if (picker.value) setDate(picker.value);
+});
+
+document.getElementById('btnPrev').addEventListener('click', () => {
+  if (picker.value) setDate(stepDate(picker.value, -1));
+});
+
+document.getElementById('btnNext').addEventListener('click', () => {
+  if (picker.value) setDate(stepDate(picker.value, +1));
+});
+
+document.getElementById('btnToday').addEventListener('click', () => {
+  setDate(todayStr);
+});
+
+// Auto-load today
+setDate(todayStr);
+</script>
+</body>
+</html>
