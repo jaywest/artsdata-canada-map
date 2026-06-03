@@ -714,28 +714,43 @@ function processBindings(bindings) {
     if (found) { nacEvent = found; break; }
   }
 
-  // Select up to 20 events with geographic spread (at most 3 per province)
+  // Select up to 20 events, maximising geographic spread:
+  //   Pass 1 — one event per province, preferring a city not yet on the map
+  //   Pass 2 — a second event per province, again preferring a new city
+  //   Pass 3 — a third event per province if still under the cap
+  // Within each pass, a candidate is skipped if its city is already
+  // represented, and we fall back to the next candidate in that province.
   const MAX_TOTAL = 20;
   const MAX_PER_PROV = 3;
   const result = [];
+  const usedCities = new Set(); // tracks "city|province" keys already on the map
 
-  // Seed with NAC event first so it's guaranteed a slot
-  if (nacEvent) result.push(nacEvent);
+  function cityKey(ev) {
+    return (ev.city || '').toLowerCase() + '|' + (ev.province || '');
+  }
+
+  function addEvent(ev) {
+    result.push(ev);
+    usedCities.add(cityKey(ev));
+  }
+
+  // Seed with NAC event first — guaranteed slot
+  if (nacEvent) addEvent(nacEvent);
 
   const provs = Object.keys(byProv);
 
-  // Round-robin: add 1 per province first, then fill up to MAX_PER_PROV
   for (let round = 0; round < MAX_PER_PROV; round++) {
     for (const p of provs) {
       if (result.length >= MAX_TOTAL) break;
       const candidates = byProv[p];
-      for (let i = round; i < Math.min(candidates.length, round + 1); i++) {
-        // Skip if already added (e.g. the NAC event)
-        if (!result.includes(candidates[i])) {
-          result.push(candidates[i]);
-          break;
-        }
-      }
+
+      // Find the first candidate in this province not already in results,
+      // preferring one whose city hasn't been used yet
+      const newCity  = candidates.find(c => !result.includes(c) && !usedCities.has(cityKey(c)));
+      const anyNew   = candidates.find(c => !result.includes(c));
+      const pick     = newCity || anyNew;
+
+      if (pick) addEvent(pick);
     }
     if (result.length >= MAX_TOTAL) break;
   }
@@ -796,59 +811,59 @@ function renderEvents(events) {
     document.querySelectorAll(`.province-label[data-prov="${p}"]`).forEach(el => el.classList.add('active'));
   }
 
-  // Group events by city to avoid exact overlap
+  // Group events by city so we can apply cluster offsets when needed
   const byCity = {};
   for (const ev of events) {
-    const key = (ev.city || 'unknown') + '|' + ev.province;
+    const key = (ev.city || 'unknown') + '|' + (ev.province || '');
     (byCity[key] = byCity[key] || []).push(ev);
   }
 
-  // Place dots
-  for (const [key, cityEvents] of Object.entries(byCity)) {
-    const city = cityEvents[0].city;
+  // Cluster offset pattern: first dot sits on the exact coordinate;
+  // additional dots in the same city spiral outward by ~10px so every
+  // event is individually hoverable without a badge or expand interaction.
+  const CLUSTER_OFFSETS = [
+    [0, 0],
+    [-10, -7],
+    [10, -7],
+    [-10,  7],
+    [10,  7],
+  ];
+
+  for (const cityEvents of Object.values(byCity)) {
+    const city     = cityEvents[0].city;
     const province = cityEvents[0].province;
-    const coords = getCityCoords(city, province);
+    const coords   = getCityCoords(city, province);
     if (!coords) continue;
 
     const [lat, lon] = coords;
-    const { x, y } = project(lat, lon);
+    const base = project(lat, lon);
 
-    // If multiple events in same city, we'll show the count in the popup
-    const ev = cityEvents[0];
-    const others = cityEvents.slice(1);
+    cityEvents.forEach((ev, i) => {
+      const [dx, dy] = CLUSTER_OFFSETS[i] || [
+        (i % 2 === 0 ? 1 : -1) * Math.ceil(i / 2) * 10,
+        Math.ceil(i / 2) * 8,
+      ];
+      const cx = base.x + dx;
+      const cy = base.y + dy;
 
-    const circle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
-    circle.setAttribute('cx', x.toFixed(1));
-    circle.setAttribute('cy', y.toFixed(1));
-    circle.setAttribute('r', others.length > 0 ? '8' : '6');
-    circle.setAttribute('class', 'event-dot');
-    circle.dataset.city = city || '';
-    circle.dataset.province = province || '';
-    circle.dataset.eventUri = ev.uri;
+      const circle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+      circle.setAttribute('cx', cx.toFixed(1));
+      circle.setAttribute('cy', cy.toFixed(1));
+      circle.setAttribute('r', '6');
+      circle.setAttribute('class', 'event-dot');
+      circle.dataset.city     = city     || '';
+      circle.dataset.province = province || '';
+      circle.dataset.eventUri = ev.uri;
 
-    // Hover handlers
-    circle.addEventListener('mouseenter', (e) => showPopup(e, ev, others, x, y));
-    circle.addEventListener('mouseleave', hidePopup);
+      circle.addEventListener('mouseenter', () => showPopup(ev, cx, cy));
+      circle.addEventListener('mouseleave', hidePopup);
 
-    dotsLayer.appendChild(circle);
-
-    // Count badge for multi-event cities
-    if (others.length > 0) {
-      const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
-      text.setAttribute('x', x.toFixed(1));
-      text.setAttribute('y', (y + 4).toFixed(1));
-      text.setAttribute('text-anchor', 'middle');
-      text.setAttribute('font-size', '9');
-      text.setAttribute('fill', '#0d1117');
-      text.setAttribute('font-weight', '700');
-      text.setAttribute('pointer-events', 'none');
-      text.textContent = cityEvents.length;
-      dotsLayer.appendChild(text);
-    }
+      dotsLayer.appendChild(circle);
+    });
   }
 }
 
-function showPopup(mouseEvent, ev, others, svgX, svgY) {
+function showPopup(ev, svgX, svgY) {
   const popup = document.getElementById('popup');
   const mapContainer = document.getElementById('map-container');
   const svg = document.getElementById('canada-map');
@@ -936,15 +951,7 @@ function showPopup(mouseEvent, ev, others, svgX, svgY) {
     imageEl.style.display = 'none';
   }
 
-  const more = document.getElementById('popup-more');
-  if (others.length > 0) {
-    const names = others.slice(0, 2).map(o => o.name).join(', ');
-    const extra = others.length > 2 ? ` +${others.length - 2} more` : '';
-    more.textContent = `Also in this city: ${names}${extra}`;
-    more.style.display = 'block';
-  } else {
-    more.style.display = 'none';
-  }
+  document.getElementById('popup-more').style.display = 'none';
 
   popup.classList.add('visible');
 }
